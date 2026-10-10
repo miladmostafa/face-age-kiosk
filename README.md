@@ -36,15 +36,23 @@ The scanner is the [`face-age`](https://www.npmjs.com/package/face-age) widget. 
 
 Requirements: Node.js 22 or newer, npm, and a webcam for a live scan.
 
+### Install dependencies
+
 ```bash
 npm install
 ```
 
-Install the latest Face Age SDK as its own step (this updates the widget used by the kiosk):
+### Install the latest face-age package
+
+Install the latest [`face-age`](https://www.npmjs.com/package/face-age) skin analysis package on its own, before you build, package, or start the kiosk:
 
 ```bash
 npm install face-age@latest
 ```
+
+That command installs the current Face Age release from npm and copies the widget the kiosk serves. Run it again whenever you want a newer skin scan widget, then build.
+
+### Configure and start
 
 Copy the environment template and start the app:
 
@@ -109,7 +117,7 @@ The staff language list matches the codes supported by Face Age (`en` by default
 | Script | Purpose |
 | --- | --- |
 | `npm run dev` | Vite plus Electron in a window |
-| `npm run build` | Compile the main process and the renderer |
+| `npm run build` | Compile the main process and the renderer. Run `npm install face-age@latest` first |
 | `npm start` | Launch the built app in kiosk mode |
 | `npm test` | Unit tests |
 | `npm run lint` | ESLint |
