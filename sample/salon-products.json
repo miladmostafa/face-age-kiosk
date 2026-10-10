@@ -1,0 +1,63 @@
+[
+  {
+    "id": "lumen-cleanser",
+    "title": "Lumen Cream Cleanser",
+    "description": "Gentle cream cleanser for a reception facial. 120 ml.",
+    "url": "https://example.com/lumen/cream-cleanser",
+    "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=70",
+    "price": 28,
+    "offerPrice": 24,
+    "problems": ["dryness", "dullness", "redness"],
+    "routineGroups": { "morning": ["cleanser"], "night": ["cleanser"] }
+  },
+  {
+    "id": "lumen-serum",
+    "title": "Lumen Bright Serum",
+    "description": "Vitamin C serum used after cleansing. 30 ml.",
+    "url": "https://example.com/lumen/bright-serum",
+    "image": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=800&q=70",
+    "price": 54,
+    "problems": ["pigment", "dullness", "fineWrinkles"],
+    "routineGroups": { "morning": ["serum"], "night": ["serum"] }
+  },
+  {
+    "id": "lumen-eye",
+    "title": "Lumen Eye Concentrate",
+    "description": "Light eye treatment for a tired look. 15 ml.",
+    "url": "https://example.com/lumen/eye-concentrate",
+    "image": "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&w=800&q=70",
+    "price": 42,
+    "problems": ["eyeWrinkles", "darkCircle", "eyeBag"],
+    "routineGroups": { "morning": ["eye"], "night": ["eye"] }
+  },
+  {
+    "id": "lumen-moisture",
+    "title": "Lumen Barrier Cream",
+    "description": "Moisturizer to seal the routine. 50 ml.",
+    "url": "https://example.com/lumen/barrier-cream",
+    "image": "https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?auto=format&fit=crop&w=800&q=70",
+    "price": 38,
+    "problems": ["dryness", "oiliness", "pores"],
+    "routineGroups": { "morning": ["moisturizer"], "night": ["moisturizer"] }
+  },
+  {
+    "id": "lumen-spf",
+    "title": "Lumen Daily Shield SPF",
+    "description": "Last morning step before the guest leaves. 40 ml.",
+    "url": "https://example.com/lumen/daily-shield",
+    "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=800&q=70",
+    "price": 32,
+    "problems": ["pigment", "fineWrinkles", "deepWrinkles"],
+    "routineGroups": { "morning": ["sunscreen"] }
+  },
+  {
+    "id": "lumen-clarify",
+    "title": "Lumen Clarify Gel",
+    "description": "Night gel for congestion-prone skin. 30 ml.",
+    "url": "https://example.com/lumen/clarify-gel",
+    "image": "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=800&q=70",
+    "price": 36,
+    "problems": ["acne", "pores", "oiliness", "sagginess"],
+    "routineGroups": { "night": ["treatment"] }
+  }
+]
