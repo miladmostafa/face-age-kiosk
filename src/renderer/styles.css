@@ -220,6 +220,21 @@ body.is-scan #FaceAge-module:empty::before {
   overflow: auto;
 }
 
+#staff-dialog .form-grid {
+  max-height: min(560px, calc(100vh - 240px));
+  overflow: auto;
+  padding-bottom: 4px;
+}
+
+#staff-dialog .dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 4px;
+  padding-top: 12px;
+  background: #1c1714;
+}
+
 #staff-dialog::backdrop { background: rgba(8, 6, 5, 0.72); }
 
 .dialog-head, .pin-row, .split { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

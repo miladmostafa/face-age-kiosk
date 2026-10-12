@@ -110,7 +110,7 @@ Leave the JSON box empty to keep using the sample file. Product images and links
 
 ### Language
 
-The staff language list matches the codes supported by Face Age (`en` by default). It changes the widget language. The kiosk chrome stays in English.
+The staff language list follows the codes supported by Face Age, with English as the default. Persian is not offered. The choice changes the widget language. The kiosk chrome stays in English.
 
 ### Scripts
 

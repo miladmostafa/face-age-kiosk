@@ -10,7 +10,6 @@ export const WIDGET_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = 
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Spanish' },
   { code: 'et', label: 'Estonian' },
-  { code: 'fa', label: 'Persian' },
   { code: 'fi', label: 'Finnish' },
   { code: 'fr', label: 'French' },
   { code: 'he', label: 'Hebrew' },

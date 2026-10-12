@@ -14,6 +14,7 @@ import {
 import { isAllowedExternalUrl } from '../src/shared/external-url';
 import { buildFaceAgeOptions } from '../src/shared/faceage-options';
 import { createIdleClock, IDLE_TIMEOUT_MS } from '../src/shared/idle';
+import { normalizeLanguage, WIDGET_LANGUAGES } from '../src/shared/languages';
 import { DEFAULT_ADMIN_PIN, pinsMatch, validatePinFormat } from '../src/shared/pin';
 import { parseProductsJson, resolveCatalog } from '../src/shared/products';
 import { createGuestSession, reduceGuestSession } from '../src/shared/session';
@@ -219,6 +220,18 @@ describe('demo gate', () => {
     expect(readDemoShot('?demo=1&shot=consent', true)).toBe('consent');
     expect(readDemoShot('?demo=1&shot=nope', true)).toBeNull();
     expect(sessionForDemo('quiz').stage).toBe('quiz');
+  });
+});
+
+describe('english copy', () => {
+  it('does not offer Persian and keeps source text in English', () => {
+    expect(WIDGET_LANGUAGES.some((language) => language.code === 'fa' || /persian/i.test(language.label))).toBe(false);
+    expect(normalizeLanguage('fa')).toBe('en');
+    expect(normalizeLanguage('en')).toBe('en');
+    for (const file of walk(path.join(root, 'src'))) {
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toMatch(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/);
+    }
   });
 });
 

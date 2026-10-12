@@ -52,6 +52,7 @@ class KioskController {
   private resetting = false;
   private adminOpen = false;
   private staffPin = '';
+  private readonly boundFrameDocs = new WeakSet<Document>();
   private statusText = '';
   private readonly forceMissingId: boolean;
 
@@ -80,6 +81,7 @@ class KioskController {
   }
 
   start(): void {
+    this.clock.markActivity(Date.now());
     this.render();
     window.setInterval(() => this.tickIdle(), 250);
     const mark = () => this.clock.markActivity(Date.now());
@@ -415,6 +417,30 @@ class KioskController {
     if (status) status.textContent = message;
   }
 
+  /**
+   * Guest activity inside the skin scanner happens in the package's own frame.
+   * Listen for it there. Do not move, replace, or remove that frame.
+   */
+  private bindFrameActivity(): void {
+    const host = document.getElementById('FaceAge-module');
+    if (!host) return;
+    const frames = host.querySelectorAll('iframe');
+    for (const frame of frames) {
+      let doc: Document | null = null;
+      try {
+        doc = (frame as HTMLIFrameElement).contentDocument;
+      } catch {
+        doc = null;
+      }
+      if (!doc || this.boundFrameDocs.has(doc)) continue;
+      this.boundFrameDocs.add(doc);
+      const mark = () => this.clock.markActivity(Date.now());
+      for (const eventName of ['pointerdown', 'pointermove', 'keydown', 'touchstart'] as const) {
+        doc.addEventListener(eventName, mark, { capture: true, passive: true });
+      }
+    }
+  }
+
   private syncIdle(now: number): void {
     const hold = this.session.stage === 'attract' || this.adminOpen;
     if (hold && !this.clock.paused) this.clock.pause(now);
@@ -423,6 +449,7 @@ class KioskController {
 
   private tickIdle(): void {
     const now = Date.now();
+    this.bindFrameActivity();
     this.syncIdle(now);
     const phase = this.clock.phase(now);
     if (phase === 'expired' && this.session.stage !== 'attract') {
@@ -478,6 +505,11 @@ class KioskController {
   }
 
   private renderPinGate(): void {
+    const form = document.createElement('form');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void tryUnlock();
+    });
     const heading = document.createElement('h2');
     heading.textContent = 'Staff PIN';
     const note = document.createElement('p');
@@ -513,10 +545,9 @@ class KioskController {
     const row = document.createElement('div');
     row.className = 'actions';
     const unlock = document.createElement('button');
-    unlock.type = 'button';
+    unlock.type = 'submit';
     unlock.className = 'primary';
     unlock.textContent = 'Unlock';
-    unlock.addEventListener('click', () => void tryUnlock());
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'secondary';
@@ -534,10 +565,8 @@ class KioskController {
       this.dialog.replaceChildren();
       this.renderSettingsForm();
     };
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') void tryUnlock();
-    });
-    this.dialog.append(heading, note, input, pad, error, row);
+    form.append(heading, note, input, pad, error, row);
+    this.dialog.append(form);
   }
 
   private renderSettingsForm(): void {
@@ -562,8 +591,9 @@ class KioskController {
       this.dialog.append(heading, source);
     }
 
-    const form = document.createElement('div');
+    const form = document.createElement('form');
     form.className = 'form-grid';
+    form.addEventListener('submit', (event) => event.preventDefault());
     const clientField = labeledInput('Client ID', 'text', settings.clientId);
     const language = document.createElement('select');
     language.setAttribute('aria-label', 'Widget language');
@@ -653,7 +683,7 @@ class KioskController {
     close.textContent = 'Close';
     close.addEventListener('click', () => this.closeStaff());
     const row = document.createElement('div');
-    row.className = 'actions';
+    row.className = 'actions dialog-actions';
     row.append(save, change, quit, close);
 
     form.append(clientField.label, languageLabel, pathField.label, fileRow, jsonLabel, pinInput.label, message, row);
