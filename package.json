@@ -1,0 +1,88 @@
+{
+  "name": "face-age-kiosk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-screen Electron kiosk for beauty salons and clinics. Walk-up Face Age skin scan, quiz, salon product routine, optional email results, and automatic reset for the next guest.",
+  "license": "MIT",
+  "author": "Clinic & Salon Kiosk contributors",
+  "homepage": "https://getfaceage.com",
+  "keywords": [
+    "face-age",
+    "skin-analysis",
+    "skin-scanner",
+    "salon-kiosk",
+    "clinic-kiosk",
+    "beauty-salon",
+    "skincare",
+    "electron",
+    "kiosk",
+    "facial-analysis",
+    "cosmetic-clinic"
+  ],
+  "main": "dist/main/main.js",
+  "scripts": {
+    "postinstall": "node scripts/copy-face-age.mjs",
+    "copy:face-age": "node scripts/copy-face-age.mjs",
+    "dev": "cross-env KIOSK_MODE=0 concurrently -k -n vite,app \"vite --host 127.0.0.1 --port 5173 --strictPort\" \"wait-on http://127.0.0.1:5173 && tsc -p tsconfig.electron.json && electron .\"",
+    "build": "node scripts/copy-face-age.mjs && tsc -p tsconfig.electron.json && vite build",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "face-age": "2.4.13"
+  },
+  "build": {
+    "appId": "com.getfaceage.salonkiosk",
+    "productName": "Clinic and Salon Kiosk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "sample/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!**/*.map",
+      "!**/.env",
+      "!**/.env.*",
+      "!src/**",
+      "!tests/**",
+      "!docs/**",
+      "!release/**",
+      "!**/*.md"
+    ],
+    "asar": true,
+    "linux": {
+      "target": ["AppImage", "dir"],
+      "category": "Utility"
+    },
+    "mac": {
+      "target": ["dmg", "dir"],
+      "category": "public.app-category.lifestyle"
+    },
+    "win": {
+      "target": ["nsis", "dir"]
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@fontsource/fraunces": "^5.2.9",
+    "@fontsource/outfit": "^5.2.8",
+    "@types/node": "^24.5.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.36.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0",
+    "vite": "^7.1.6",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.5"
+  }
+}

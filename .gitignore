@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+src/renderer/public/vendor/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.vite/
