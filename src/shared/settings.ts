@@ -6,6 +6,12 @@ export interface SettingsDraft {
   productsJson: string;
   productsPath: string;
   language: string;
+  /** When false, the kiosk stays camera-only. Missing or any other value stays on. */
+  photoUpload: boolean;
+}
+
+export function photoUploadEnabled(value: boolean | undefined): boolean {
+  return value !== false;
 }
 
 export function validateSettingsDraft(
@@ -15,6 +21,7 @@ export function validateSettingsDraft(
   const productsJson = draft.productsJson.trim();
   const productsPath = draft.productsPath.trim();
   const language = normalizeLanguage(draft.language);
+  const photoUpload = photoUploadEnabled(draft.photoUpload);
   if (draft.language.trim() && language !== draft.language.trim().toLowerCase()) {
     return { ok: false, error: 'Choose a language supported by Face Age.' };
   }
@@ -24,6 +31,6 @@ export function validateSettingsDraft(
   }
   return {
     ok: true,
-    value: { clientId, productsJson, productsPath, language },
+    value: { clientId, productsJson, productsPath, language, photoUpload },
   };
 }

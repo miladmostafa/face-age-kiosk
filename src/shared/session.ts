@@ -4,18 +4,23 @@ export type SkinType = (typeof SKIN_TYPES)[number];
 
 export type GuestStage = 'attract' | 'consent' | 'quiz' | 'scan';
 
+/** Camera is the default. Upload is an explicit guest choice or a no-camera fallback. */
+export type CaptureMode = 'camera' | 'upload';
+
 export interface GuestSession {
   stage: GuestStage;
   consentAccepted: boolean;
   skinType: SkinType | '';
   email: string;
+  captureMode: CaptureMode;
 }
 
 export type GuestAction =
-  | { type: 'start' }
+  | { type: 'start'; captureMode?: CaptureMode }
   | { type: 'toggle-consent'; accepted: boolean }
   | { type: 'set-skin'; skinType: SkinType }
   | { type: 'set-email'; email: string }
+  | { type: 'use-upload' }
   | { type: 'continue' }
   | { type: 'reset' };
 
@@ -25,6 +30,7 @@ export function createGuestSession(): GuestSession {
     consentAccepted: false,
     skinType: '',
     email: '',
+    captureMode: 'camera',
   };
 }
 
@@ -36,7 +42,14 @@ export function reduceGuestSession(state: GuestSession, action: GuestAction): Gu
   switch (action.type) {
     case 'start':
       if (state.stage !== 'attract') return state;
-      return { ...createGuestSession(), stage: 'consent' };
+      return {
+        ...createGuestSession(),
+        stage: 'consent',
+        captureMode: action.captureMode === 'upload' ? 'upload' : 'camera',
+      };
+    case 'use-upload':
+      if (state.stage !== 'scan') return state;
+      return { ...state, captureMode: 'upload' };
     case 'toggle-consent':
       if (state.stage !== 'consent') return state;
       return { ...state, consentAccepted: action.accepted };

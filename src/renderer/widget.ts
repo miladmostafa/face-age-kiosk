@@ -1,5 +1,5 @@
 import FaceAge, { type FaceAgeWidget } from 'face-age';
-import { buildFaceAgeOptions } from '../shared/faceage-options';
+import { buildFaceAgeOptions, type FaceCaptureChoice } from '../shared/faceage-options';
 import type { SalonProduct } from '../shared/products';
 
 export interface MountedWidget {
@@ -30,10 +30,14 @@ export function mountWidget(input: {
   language: string;
   email: string;
   products: SalonProduct[];
+  capture: FaceCaptureChoice;
   onReset: () => void;
 }): MountedWidget {
   const host = document.getElementById('FaceAge-module');
   if (!host) throw new Error('The page is missing #FaceAge-module.');
+  if (input.capture.mode === 'unavailable') {
+    throw new Error('No camera is available, and photo upload is turned off.');
+  }
   installSdkAnswerShim();
 
   const widget = new FaceAge(
@@ -41,6 +45,8 @@ export function mountWidget(input: {
       clientId: input.clientId,
       language: input.language,
       email: input.email,
+      showCamera: input.capture.showCamera,
+      showUpload: input.capture.showUpload,
     }),
   );
   const pending = widget.render();

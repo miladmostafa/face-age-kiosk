@@ -16,14 +16,15 @@ The scanner is the [`face-age`](https://www.npmjs.com/package/face-age) widget. 
 - **Email me my results** calls `submitSdkIntegration` and does not keep the address
 - **PDF report** calls `getReportPdf` when the Face Age plan allows it
 - Idle reset after 60 seconds, plus a staff-controlled finish button
-- PIN-gated staff settings for Client ID, products JSON, and widget language
+- PIN-gated staff settings for Client ID, products JSON, widget language, and photo upload
+- Photo upload through the Face Age `showUpload` path. The camera stays the default. Staff can turn upload off; it is on by default. If the device has no camera and upload is on, the kiosk opens upload automatically
 - No guest photos, results, or emails stored on the device by default
 
 ## How it works
 
 1. The salon leaves a tablet or PC running the kiosk at reception.
 2. A guest taps **Start**, accepts consent, chooses a skin type, and can enter an email.
-3. The Face Age widget opens in the page, runs its quiz, and scans the face with the webcam.
+3. The Face Age widget opens in the page and runs its quiz. The camera is the default scan. **Upload a photo** on the welcome screen or the scan screen uses the widget’s own upload control. If no camera is available and photo upload is on, the kiosk opens that upload path automatically.
 4. The guest sees skin age, skin concerns, and a routine that uses the salon’s products.
 5. **Email me my results** sends that visit through `submitSdkIntegration`. **PDF report** requests a plan-based report.
 6. After 60 seconds without touch, mouse, or keyboard activity — or when the guest taps **Finish** — the kiosk clears the visit and returns to the welcome screen.
@@ -34,7 +35,7 @@ The scanner is the [`face-age`](https://www.npmjs.com/package/face-age) widget. 
 
 ## Quick start
 
-Requirements: Node.js 22 or newer, npm, and a webcam for a live scan.
+Requirements: Node.js 22 or newer, npm, and a webcam for a live camera scan. A photo file is enough when photo upload is on.
 
 ### Install dependencies
 
@@ -71,7 +72,7 @@ UI preview without Electron, from the dev server:
 - Missing Client ID: `http://127.0.0.1:5173/?demo=1&shot=missing-id`
 - Staff settings: `http://127.0.0.1:5173/?demo=1&shot=settings`
 
-A live camera scan is not shown in the screenshots. It needs a webcam, a network connection, and a Client ID.
+A live camera scan needs a webcam, a network connection, and a Client ID. Photo upload uses the same Client ID. The browser preview reads `FACEAGE_CLIENT_ID` from `.env.local` through the dev server. That value is not written into the built page.
 
 ## Configuration
 
@@ -94,7 +95,24 @@ A value saved in Staff settings overrides the environment variable. If neither i
 
 Open staff settings with the **Staff** button, by pressing **F8**, or by tapping the title five times. The first-run PIN is `2580`. Change it before guests use the device.
 
-![Staff settings for Client ID, products JSON, and widget language](docs/screenshots/settings.png)
+![Staff settings for Client ID, products JSON, widget language, and photo upload](docs/screenshots/settings.png)
+
+### Photo upload
+
+Photo upload is on by default. The camera stays the default scan.
+
+- **Upload a photo** on the welcome screen starts the same consent and quiz flow, then opens the Face Age upload control (`showUpload`).
+- **Upload a photo** on the scan screen switches the widget to that same upload control, or opens the file picker when upload is already showing.
+- If the device has no camera, or the camera cannot start, and photo upload is still on, the kiosk uses upload instead of leaving the guest on a camera error.
+- In staff settings, clear **Allow photo upload** and save to make the kiosk camera-only. The control is behind the staff PIN.
+
+Uploaded photos are handled by the Face Age widget. They are cleared with the rest of the visit.
+
+![Welcome screen with Start and Upload a photo](docs/screenshots/upload-welcome.png)
+
+![Skin age and skin health after an uploaded photo](docs/screenshots/upload-results.png)
+
+![Salon products matched to the uploaded photo](docs/screenshots/upload-products.png)
 
 ### Products
 
@@ -136,7 +154,7 @@ This is a shared device.
 - The widget is created with `history: false`, so scans are not written into the widget history store.
 - Guest email lives in memory only long enough to call `submitSdkIntegration`. It is not written to settings.
 - Idle reset, **Finish**, and the widget reset clear web storage, the HTTP cache, and any PDF saved for that visit.
-- Upload from the device disk is off. The scan uses the webcam.
+- Photo upload is on unless staff turn it off. An uploaded photo is handled by the Face Age widget and cleared with the visit. The camera remains the default.
 - The kiosk is not a medical device and does not provide a diagnosis.
 
 Staff settings (Client ID, catalog, language, PIN) stay on the device. They are not guest data.
@@ -150,6 +168,10 @@ No. It is a cosmetic skin scan for a salon or clinic counter. It does not replac
 ### Where does the photo go?
 
 The Face Age widget sends the photo to the Face Age cloud for analysis. The kiosk deletes local widget state, storage, and temporary report files when the session ends.
+
+### Can a guest upload a photo instead of using the camera?
+
+Yes, when photo upload is on, which is the default. **Upload a photo** is on the welcome screen and on the scan screen. It uses the Face Age widget upload path. Staff can turn it off with the PIN. If the kiosk has no camera and upload is still on, the scan uses upload automatically.
 
 ### What if no Client ID is set?
 
@@ -169,7 +191,7 @@ The shell can open offline. A scan, email, and PDF need a network connection to 
 
 ## Stack
 
-Electron, Vite, TypeScript, electron-builder, and electron-store. The skin widget is [`face-age`](https://www.npmjs.com/package/face-age) from [getfaceage.com](https://getfaceage.com). The page hosts `<div id="FaceAge-module"></div>` directly. The widget’s own internal frame is part of the SDK and is not modified.
+Electron, Vite, TypeScript, electron-builder, and electron-store. The skin widget is [`face-age`](https://www.npmjs.com/package/face-age) from [getfaceage.com](https://getfaceage.com). The page hosts `<div id="FaceAge-module"></div>` directly. The widget’s own internal frame is part of the SDK and is not modified. Photo upload uses the widget’s `showUpload` option and its own file control.
 
 ## License
 

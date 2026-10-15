@@ -17,6 +17,7 @@ interface StoreShape {
   productsJson: string;
   productsPath: string;
   language: string;
+  photoUpload: boolean;
   pin: string;
 }
 
@@ -84,6 +85,7 @@ function buildBootstrap(store: Store<StoreShape>): BootstrapPayload {
     productsJson: store.get('productsJson'),
     productsPath: store.get('productsPath'),
     language: store.get('language'),
+    photoUpload: store.get('photoUpload'),
   };
   const sample = sampleProductsJson();
   let fileJson: string | null = null;
@@ -131,6 +133,7 @@ function registerIpc(store: Store<StoreShape>, allowQuit: { value: boolean }): v
     store.set('productsJson', validated.value.productsJson);
     store.set('productsPath', validated.value.productsPath);
     store.set('language', validated.value.language);
+    store.set('photoUpload', validated.value.photoUpload);
     return { ok: true, bootstrap: buildBootstrap(store) };
   });
 
@@ -262,6 +265,7 @@ void app.whenReady().then(async () => {
       productsJson: '',
       productsPath: '',
       language: 'en',
+      photoUpload: true,
       pin: DEFAULT_ADMIN_PIN,
     },
   });
