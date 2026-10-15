@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { hasVideoInput } from '../src/shared/camera';
 import { resolveClientId } from '../src/shared/client-id';
 import { readDemoShot, sessionForDemo } from '../src/shared/demo';
 import { applyEnvLayers, parseEnvFile } from '../src/shared/env-file';
@@ -12,13 +13,13 @@ import {
   readSelections,
 } from '../src/shared/email';
 import { isAllowedExternalUrl } from '../src/shared/external-url';
-import { buildFaceAgeOptions } from '../src/shared/faceage-options';
+import { buildFaceAgeOptions, resolveFaceCapture } from '../src/shared/faceage-options';
 import { createIdleClock, IDLE_TIMEOUT_MS } from '../src/shared/idle';
 import { normalizeLanguage, WIDGET_LANGUAGES } from '../src/shared/languages';
 import { DEFAULT_ADMIN_PIN, pinsMatch, validatePinFormat } from '../src/shared/pin';
 import { parseProductsJson, resolveCatalog } from '../src/shared/products';
 import { createGuestSession, reduceGuestSession } from '../src/shared/session';
-import { validateSettingsDraft } from '../src/shared/settings';
+import { photoUploadEnabled, validateSettingsDraft } from '../src/shared/settings';
 
 const root = path.resolve(__dirname, '..');
 
@@ -53,7 +54,27 @@ describe('guest session', () => {
     expect(session.stage).toBe('quiz');
     session = reduceGuestSession(session, { type: 'set-skin', skinType: 'dry' });
     session = reduceGuestSession(session, { type: 'continue' });
-    expect(session).toMatchObject({ stage: 'scan', skinType: 'dry', email: 'guest@example.com' });
+    expect(session).toMatchObject({
+      stage: 'scan',
+      skinType: 'dry',
+      email: 'guest@example.com',
+      captureMode: 'camera',
+    });
+  });
+
+  it('keeps an upload choice through the visit and clears it on reset', () => {
+    let session = reduceGuestSession(createGuestSession(), { type: 'start', captureMode: 'upload' });
+    expect(session.captureMode).toBe('upload');
+    session = reduceGuestSession(session, { type: 'toggle-consent', accepted: true });
+    session = reduceGuestSession(session, { type: 'continue' });
+    session = reduceGuestSession(session, { type: 'set-skin', skinType: 'normal' });
+    session = reduceGuestSession(session, { type: 'continue' });
+    expect(session.captureMode).toBe('upload');
+    session = reduceGuestSession(session, { type: 'use-upload' });
+    expect(session.captureMode).toBe('upload');
+    expect(reduceGuestSession(createGuestSession(), { type: 'use-upload' }).captureMode).toBe('camera');
+    session = reduceGuestSession(session, { type: 'reset' });
+    expect(session).toEqual(createGuestSession());
   });
 
   it('clears consent, skin type, and email on reset', () => {
@@ -111,13 +132,44 @@ describe('products and settings', () => {
     expect(parsed.ok).toBe(false);
   });
 
+  it('keeps photo upload on unless staff turn it off', () => {
+    expect(photoUploadEnabled(undefined)).toBe(true);
+    expect(photoUploadEnabled(true)).toBe(true);
+    expect(photoUploadEnabled(false)).toBe(false);
+    const on = validateSettingsDraft({
+      clientId: '  ',
+      productsJson: '',
+      productsPath: '',
+      language: 'en',
+      photoUpload: true,
+    });
+    expect(on.ok).toBe(true);
+    if (on.ok) expect(on.value.photoUpload).toBe(true);
+    const off = validateSettingsDraft({
+      clientId: '',
+      productsJson: '',
+      productsPath: '',
+      language: 'en',
+      photoUpload: false,
+    });
+    expect(off.ok).toBe(true);
+    if (off.ok) expect(off.value.photoUpload).toBe(false);
+  });
+
   it('keeps an empty client id valid and checks language and products', () => {
-    expect(validateSettingsDraft({ clientId: '  ', productsJson: '', productsPath: '', language: 'en' }).ok).toBe(true);
+    expect(validateSettingsDraft({
+      clientId: '  ',
+      productsJson: '',
+      productsPath: '',
+      language: 'en',
+      photoUpload: true,
+    }).ok).toBe(true);
     const bad = validateSettingsDraft({
       clientId: '',
       productsJson: '{',
       productsPath: '',
       language: 'en',
+      photoUpload: true,
     });
     expect(bad.ok).toBe(false);
     const language = validateSettingsDraft({
@@ -125,6 +177,7 @@ describe('products and settings', () => {
       productsJson: '',
       productsPath: '',
       language: 'zz',
+      photoUpload: true,
     });
     expect(language.ok).toBe(false);
   });
@@ -136,6 +189,8 @@ describe('face age options', () => {
       clientId: 'from-settings',
       language: 'fr',
       email: 'Guest@Example.com',
+      showCamera: true,
+      showUpload: true,
     });
     expect(options).toMatchObject({
       elementId: 'FaceAge-module',
@@ -147,16 +202,67 @@ describe('face age options', () => {
       showProducts: true,
       showRoutine: true,
       showCamera: true,
-      showUpload: false,
+      showUpload: true,
       defaultQuiz: { email: 'Guest@Example.com' },
     });
     expect(options.displayModel).not.toBe('widget');
   });
 
   it('omits an invalid email from defaultQuiz', () => {
-    const options = buildFaceAgeOptions({ clientId: 'abc', language: 'nope', email: 'not-an-email' });
+    const options = buildFaceAgeOptions({
+      clientId: 'abc',
+      language: 'nope',
+      email: 'not-an-email',
+      showCamera: true,
+      showUpload: false,
+    });
     expect(options.defaultQuiz).toEqual({});
     expect(options.language).toBe('en');
+    expect(options.showUpload).toBe(false);
+    expect(options.showCamera).toBe(true);
+  });
+
+  it('keeps the camera as the default and falls back to the upload path', () => {
+    expect(resolveFaceCapture({
+      photoUpload: true,
+      cameraAvailable: true,
+      requested: 'camera',
+    })).toEqual({ showCamera: true, showUpload: true, mode: 'camera' });
+    expect(resolveFaceCapture({
+      photoUpload: true,
+      cameraAvailable: true,
+      requested: 'upload',
+    })).toEqual({ showCamera: false, showUpload: true, mode: 'upload' });
+    expect(resolveFaceCapture({
+      photoUpload: true,
+      cameraAvailable: false,
+      requested: 'camera',
+    })).toEqual({ showCamera: false, showUpload: true, mode: 'upload' });
+    expect(resolveFaceCapture({
+      photoUpload: false,
+      cameraAvailable: true,
+      requested: 'upload',
+    })).toEqual({ showCamera: true, showUpload: false, mode: 'camera' });
+    expect(resolveFaceCapture({
+      photoUpload: false,
+      cameraAvailable: false,
+      requested: 'camera',
+    })).toEqual({ showCamera: false, showUpload: false, mode: 'unavailable' });
+    expect(() => buildFaceAgeOptions({
+      clientId: 'abc',
+      language: 'en',
+      email: '',
+      showCamera: false,
+      showUpload: false,
+    })).toThrow(/photo upload is turned off/i);
+  });
+});
+
+describe('camera detection', () => {
+  it('treats a video input as a camera', () => {
+    expect(hasVideoInput([{ kind: 'audioinput' }, { kind: 'videoinput' }])).toBe(true);
+    expect(hasVideoInput([{ kind: 'audioinput' }])).toBe(false);
+    expect(hasVideoInput([])).toBe(false);
   });
 });
 
@@ -223,6 +329,16 @@ describe('demo gate', () => {
   });
 });
 
+describe('photo upload docs', () => {
+  it('documents the upload option and the separate face-age install', () => {
+    const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
+    expect(readme).toContain('npm install face-age@latest');
+    expect(readme).toMatch(/Upload a photo/);
+    expect(readme).toMatch(/photo upload/i);
+    expect(readme).toMatch(/showUpload/);
+  });
+});
+
 describe('english copy', () => {
   it('does not offer Persian and keeps source text in English', () => {
     expect(WIDGET_LANGUAGES.some((language) => language.code === 'fa' || /persian/i.test(language.label))).toBe(false);
@@ -251,11 +367,19 @@ describe('privacy boundaries in source', () => {
   it('keeps the widget iframe inside the face-age package', () => {
     const sdk = readFileSync(path.join(root, 'node_modules/face-age/dist/faceage.js'), 'utf8');
     expect(sdk).toContain('FaceAge-module-iframe');
+    expect(sdk).toContain('upload_file_image');
+    const widget = readFileSync(path.join(root, 'src/renderer/widget.ts'), 'utf8');
+    expect(widget).toContain('toAnswerArray');
+    expect(widget).toContain('setCustomProducts');
+    expect(widget).toContain('Skin Age');
     for (const file of walk(path.join(root, 'src'))) {
       const text = readFileSync(file, 'utf8');
       expect(text.includes('FaceAge-module-iframe'), file).toBe(false);
       expect(text.includes('createElement("iframe")') || text.includes("createElement('iframe')"), file).toBe(false);
     }
+    const page = readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
+    expect(page).toContain('id="FaceAge-module"');
+    expect(page.includes('<iframe')).toBe(false);
   });
 });
 

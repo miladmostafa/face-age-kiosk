@@ -1,8 +1,10 @@
+import { cameraIsAvailable } from './camera';
 import { getBridge, type KioskBridge } from './bridge';
 import { mountWidget, type MountedWidget } from './widget';
 import type { BootstrapPayload } from '../shared/bootstrap';
 import { CLIENT_ID_PANEL_URL } from '../shared/client-id';
 import { readDemoShot, sessionForDemo, type DemoShot } from '../shared/demo';
+import { resolveFaceCapture, type FaceCaptureChoice } from '../shared/faceage-options';
 import {
   buildSdkIntegrationExtra,
   explainFaceAgeError,
@@ -21,7 +23,7 @@ import {
   type GuestSession,
   type SkinType,
 } from '../shared/session';
-import type { SettingsDraft } from '../shared/settings';
+import { photoUploadEnabled as photoUploadSettingEnabled, type SettingsDraft } from '../shared/settings';
 
 const SKIN_LABELS: Record<SkinType, string> = {
   normal: 'Normal',
@@ -55,6 +57,10 @@ class KioskController {
   private readonly boundFrameDocs = new WeakSet<Document>();
   private statusText = '';
   private readonly forceMissingId: boolean;
+  private cameraAvailable: boolean | null = null;
+  private preparingCapture = false;
+  private pendingUpload = false;
+  private uploadFallbackApplied = false;
 
   constructor(
     private readonly bridge: KioskBridge,
@@ -135,8 +141,26 @@ class KioskController {
     return header;
   }
 
+  private photoUploadEnabled(): boolean {
+    return photoUploadSettingEnabled(this.bootstrap.settings.photoUpload);
+  }
+
+  private captureChoice(): FaceCaptureChoice {
+    return resolveFaceCapture({
+      photoUpload: this.photoUploadEnabled(),
+      cameraAvailable: this.cameraAvailable === true,
+      requested: this.session.captureMode,
+    });
+  }
+
+  private shouldShowModule(): boolean {
+    if (this.session.stage !== 'scan' || this.clientId() === '') return false;
+    if (this.cameraAvailable === null) return false;
+    return this.captureChoice().mode !== 'unavailable';
+  }
+
   private render(): void {
-    const scanning = this.session.stage === 'scan' && this.clientId() !== '';
+    const scanning = this.shouldShowModule();
     document.body.classList.toggle('is-scan', scanning);
     this.stage.replaceChildren();
     this.bottom.replaceChildren();
@@ -157,20 +181,35 @@ class KioskController {
     heading.textContent = 'A skin scan for the next guest';
     const lede = document.createElement('p');
     lede.className = 'lede';
-    lede.textContent =
-      'See skin age, skin health, and a routine built from this salon’s products. The photo is analyzed by Face Age in the cloud and cleared before the next person.';
+    lede.textContent = this.photoUploadEnabled()
+      ? 'See skin age, skin health, and a routine built from this salon’s products. The camera is the default. You can also upload a photo. Face Age analyzes it in the cloud, and this kiosk clears it before the next person.'
+      : 'See skin age, skin health, and a routine built from this salon’s products. The photo is analyzed by Face Age in the cloud and cleared before the next person.';
     const start = document.createElement('button');
     start.type = 'button';
     start.className = 'primary';
     start.textContent = 'Start';
     start.addEventListener('click', () => {
-      this.session = reduceGuestSession(this.session, { type: 'start' });
+      this.session = reduceGuestSession(this.session, { type: 'start', captureMode: 'camera' });
       this.render();
     });
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.append(start);
+    if (this.photoUploadEnabled()) {
+      const upload = document.createElement('button');
+      upload.type = 'button';
+      upload.className = 'secondary';
+      upload.textContent = 'Upload a photo';
+      upload.addEventListener('click', () => {
+        this.session = reduceGuestSession(this.session, { type: 'start', captureMode: 'upload' });
+        this.render();
+      });
+      actions.append(upload);
+    }
     const note = document.createElement('p');
     note.className = 'note';
     note.textContent = 'Not a diagnostic device. For cosmetic guidance only.';
-    card.append(kicker, heading, lede, start, note);
+    card.append(kicker, heading, lede, actions, note);
     this.stage.append(card);
   }
 
@@ -178,7 +217,9 @@ class KioskController {
     const card = document.createElement('section');
     card.className = 'stage-card';
     const heading = document.createElement('h1');
-    heading.textContent = 'Before the camera turns on';
+    heading.textContent = this.session.captureMode === 'upload'
+      ? 'Before the photo is analyzed'
+      : 'Before the camera turns on';
     const list = document.createElement('ul');
     list.className = 'points';
     for (const line of [
@@ -272,8 +313,72 @@ class KioskController {
       this.renderMissingClient();
       return;
     }
+    if (this.cameraAvailable === null) {
+      this.renderScanMessage('Preparing the scan', 'Checking for a camera…');
+      this.renderScanChrome('Checking for a camera…');
+      void this.prepareCapture();
+      return;
+    }
+    const choice = this.captureChoice();
+    if (choice.mode === 'unavailable') {
+      this.renderScanMessage(
+        'A camera is needed',
+        'No camera is available, and photo upload is turned off. A staff member can turn photo upload on in settings.',
+      );
+      this.renderScanChrome('No camera is available, and photo upload is turned off. A staff member can turn photo upload on in settings.');
+      return;
+    }
+    const defaultStatus = choice.mode === 'upload'
+      ? this.session.captureMode === 'upload'
+        ? 'Upload a photo to run this scan. It is cleared before the next guest.'
+        : 'No camera is available, so this visit uses photo upload.'
+      : 'Quiz, scan, then review the routine. Nothing is kept after this visit.';
+    const status = this.renderScanChrome(this.statusText || defaultStatus);
+    if (!this.mounted) {
+      try {
+        let acceptWidgetReset = false;
+        window.setTimeout(() => {
+          acceptWidgetReset = true;
+        }, 1500);
+        this.mounted = mountWidget({
+          clientId: this.clientId(),
+          language: this.bootstrap.settings.language,
+          email: this.session.email,
+          products: this.bootstrap.products,
+          capture: choice,
+          onReset: () => {
+            if (acceptWidgetReset) void this.resetForNextGuest();
+          },
+        });
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : 'The scanner could not start.';
+      }
+    }
+  }
+
+  private renderScanMessage(title: string, detail: string): void {
+    const card = document.createElement('section');
+    card.className = 'stage-card';
+    const heading = document.createElement('h1');
+    heading.textContent = title;
+    const lede = document.createElement('p');
+    lede.className = 'lede';
+    lede.textContent = detail;
+    card.append(heading, lede);
+    this.stage.append(card);
+  }
+
+  private renderScanChrome(initialStatus: string): HTMLElement {
     const actions = document.createElement('div');
     actions.className = 'actions';
+    if (this.photoUploadEnabled()) {
+      const upload = document.createElement('button');
+      upload.type = 'button';
+      upload.className = 'secondary';
+      upload.textContent = 'Upload a photo';
+      upload.addEventListener('click', () => this.requestUpload());
+      actions.append(upload);
+    }
     const emailButton = document.createElement('button');
     emailButton.type = 'button';
     emailButton.className = 'primary';
@@ -293,27 +398,94 @@ class KioskController {
     const status = document.createElement('p');
     status.className = 'status';
     status.setAttribute('role', 'status');
-    status.textContent = this.statusText || 'Quiz, scan, then review the routine. Nothing is kept after this visit.';
+    status.textContent = initialStatus;
     this.bottom.append(status, actions);
+    return status;
+  }
+
+  private async prepareCapture(): Promise<void> {
+    if (this.preparingCapture || this.cameraAvailable !== null) return;
+    this.preparingCapture = true;
+    this.cameraAvailable = await cameraIsAvailable();
+    this.preparingCapture = false;
+    if (this.session.stage === 'scan') this.render();
+  }
+
+  private requestUpload(): void {
+    if (!this.photoUploadEnabled() || this.session.stage !== 'scan') return;
+    this.session = reduceGuestSession(this.session, { type: 'use-upload' });
     if (!this.mounted) {
-      try {
-        let acceptWidgetReset = false;
-        window.setTimeout(() => {
-          acceptWidgetReset = true;
-        }, 1500);
-        this.mounted = mountWidget({
-          clientId: this.clientId(),
-          language: this.bootstrap.settings.language,
-          email: this.session.email,
-          products: this.bootstrap.products,
-          onReset: () => {
-            if (acceptWidgetReset) void this.resetForNextGuest();
-          },
-        });
-      } catch (error) {
-        status.textContent = error instanceof Error ? error.message : 'The scanner could not start.';
-      }
+      if (this.cameraAvailable !== null) this.render();
+      return;
     }
+    const opened = this.activateSdkUpload(true);
+    if (!opened) {
+      this.pendingUpload = true;
+      this.setStatus('Photo upload will open when the scanner is ready. Tap Upload a photo again to choose a file.');
+      return;
+    }
+    this.pendingUpload = false;
+    this.setStatus('Choose a photo. It is analyzed by Face Age and cleared before the next guest.');
+  }
+
+  /**
+   * Opens the face-age upload control inside the widget document.
+   * The page does not add its own frame and does not replace the widget frame.
+   */
+  private activateSdkUpload(openPicker: boolean): boolean {
+    const doc = this.widgetDocument();
+    if (!doc) return false;
+    try {
+      const change = doc.querySelector<HTMLElement>('.FaceChangeMode');
+      if (change) change.click();
+      const input = doc.querySelector<HTMLInputElement>('input.upload_file_image');
+      if (openPicker && input) {
+        input.click();
+        return true;
+      }
+      return Boolean(input || change);
+    } catch {
+      return false;
+    }
+  }
+
+  private widgetDocument(): Document | null {
+    const host = document.getElementById('FaceAge-module');
+    const frame = host?.querySelector('iframe');
+    if (!(frame instanceof HTMLIFrameElement)) return null;
+    try {
+      return frame.contentDocument;
+    } catch {
+      return null;
+    }
+  }
+
+  private followUploadRequest(): void {
+    if (!this.pendingUpload || !this.photoUploadEnabled()) return;
+    const doc = this.widgetDocument();
+    if (!doc) return;
+    const change = doc.querySelector<HTMLElement>('.FaceChangeMode');
+    if (change) change.click();
+    if (!doc.querySelector('input.upload_file_image')) return;
+    this.pendingUpload = false;
+    this.setStatus('Photo upload is ready. Tap Upload a photo to choose a file.');
+  }
+
+  private applyCameraFallback(): void {
+    if (this.uploadFallbackApplied || this.session.stage !== 'scan' || !this.mounted) return;
+    const doc = this.widgetDocument();
+    if (!doc?.querySelector('[data-testid="DirtyLensTwoToneIcon"]')) return;
+    if (!this.photoUploadEnabled()) {
+      this.uploadFallbackApplied = true;
+      this.setStatus('The camera is unavailable. A staff member can turn on photo upload.');
+      return;
+    }
+    const change = doc.querySelector<HTMLElement>('.FaceChangeMode');
+    if (!change) return;
+    this.uploadFallbackApplied = true;
+    change.click();
+    this.session = reduceGuestSession(this.session, { type: 'use-upload' });
+    this.setStatus('The camera is unavailable, so this visit continues with photo upload.');
   }
 
   private renderMissingClient(): void {
@@ -450,6 +622,8 @@ class KioskController {
   private tickIdle(): void {
     const now = Date.now();
     this.bindFrameActivity();
+    this.followUploadRequest();
+    this.applyCameraFallback();
     this.syncIdle(now);
     const phase = this.clock.phase(now);
     if (phase === 'expired' && this.session.stage !== 'attract') {
@@ -607,6 +781,15 @@ class KioskController {
     const languageLabel = document.createElement('label');
     languageLabel.className = 'field';
     languageLabel.append(document.createTextNode('Widget language'), language);
+    const uploadLabel = document.createElement('label');
+    uploadLabel.className = 'check';
+    const uploadBox = document.createElement('input');
+    uploadBox.type = 'checkbox';
+    uploadBox.checked = photoUploadSettingEnabled(settings.photoUpload);
+    uploadLabel.append(uploadBox, document.createTextNode('Allow photo upload'));
+    const uploadHint = document.createElement('p');
+    uploadHint.className = 'hint';
+    uploadHint.textContent = 'On by default. The camera stays the main scan. Guests can upload a photo, and the kiosk uses upload when no camera is available. Turn this off to keep the kiosk camera-only.';
     const pathField = labeledInput('Products JSON path', 'text', settings.productsPath);
     const json = document.createElement('textarea');
     json.value = settings.productsJson;
@@ -663,6 +846,7 @@ class KioskController {
       productsJson: json.value,
       productsPath: pathField.input.value,
       language: language.value,
+      photoUpload: uploadBox.checked,
     }, message));
 
     const pinInput = labeledInput('New staff PIN', 'password', '');
@@ -686,7 +870,7 @@ class KioskController {
     row.className = 'actions dialog-actions';
     row.append(save, change, quit, close);
 
-    form.append(clientField.label, languageLabel, pathField.label, fileRow, jsonLabel, pinInput.label, message, row);
+    form.append(clientField.label, languageLabel, uploadLabel, uploadHint, pathField.label, fileRow, jsonLabel, pinInput.label, message, row);
     this.dialog.append(form);
   }
 
